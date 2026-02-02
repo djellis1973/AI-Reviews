@@ -26,6 +26,9 @@ st.markdown("""
             text-align: center;
             margin-bottom: 2rem;
         }
+        hr {
+            margin: 2rem 0;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -48,7 +51,7 @@ When asked about a restaurant, give a balanced summary:
 Be factual, concise, helpful. Use markdown when useful.
 """
 
-# Initialize messages (internal only)
+# Initialize messages
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "system", "content": SYSTEM_PROMPT}
@@ -73,17 +76,27 @@ if not pre_filled:
     st.warning("No restaurant specified. Please add ?query=... to the URL.")
     st.stop()
 
-# Add query only once
-if len(st.session_state.messages) == 1:
-    st.session_state.messages.append({"role": "user", "content": pre_filled})
+# Clean up the title: remove leading "Review " if present, capitalize nicely
+review_prefix = "Review "
+if pre_filled.lower().startswith(review_prefix.lower()):
+    clean_name = pre_filled[len(review_prefix):].strip()
+else:
+    clean_name = pre_filled.strip()
 
-# Header
-st.title("Restaurant Review")
+# Make title case look good (you can adjust this logic if needed)
+page_title = f"Review of {clean_name}"
 
-# Show what we're reviewing
-st.markdown(f"**{pre_filled}**")
+# Set dynamic page title (browser tab)
+st.set_page_config(page_title=page_title, page_icon="🍴", layout="wide")
+
+# Show nice H1 header
+st.title(page_title)
 
 st.markdown("---")
+
+# Add query to messages only once (for the AI)
+if len(st.session_state.messages) == 1:
+    st.session_state.messages.append({"role": "user", "content": pre_filled})
 
 # Generate review only once
 if len(st.session_state.messages) == 2:
