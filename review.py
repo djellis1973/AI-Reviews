@@ -1,5 +1,6 @@
 # app.py
-# General Restaurant Reviewer & Menu Assistant – powered by GPT-4o-mini
+# Restaurant Reviewer & Menu AI – with URL pre-population support
+# Powered by GPT-4o-mini
 
 import streamlit as st
 from openai import OpenAI
@@ -24,7 +25,7 @@ if "OPENAI_API_KEY" not in st.secrets:
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ────────────────────────────────────────────────
-# System prompt – now focused on general restaurant reviews + menu help
+# System prompt (general restaurant reviewer mode)
 # ────────────────────────────────────────────────
 SYSTEM_PROMPT = """
 You are a knowledgeable, friendly restaurant reviewer and food expert with broad knowledge of dining worldwide (Paris, Tokyo, Hanoi, etc.).
@@ -53,41 +54,116 @@ if "messages" not in st.session_state:
     ]
 
 # ────────────────────────────────────────────────
-# UI – Header & Sidebar
+# Handle pre-filled query from URL (?query=...)
+# ────────────────────────────────────────────────
+pre_filled = st.query_params.get("query", None)
+if pre_filled and isinstance(pre_filled, str):
+    decoded_query = pre_filled  # already decoded by Streamlit in recent versions
+    # Only add if chat is fresh (prevents duplicates on refresh)
+    if len(st.session_state.messages) == 1:  # only system prompt exists
+        st.session_state.messages.append({"role": "user", "content": decoded_query})
+
+# ────────────────────────────────────────────────
+# Quick search buttons logic
+# ────────────────────────────────────────────────
+def add_quick_query(query):
+    if st.session_state.messages and st.session_state.messages[-1]["content"] == query:
+        return
+    st.session_state.messages.append({"role": "user", "content": query})
+    st.rerun()
+
+# ────────────────────────────────────────────────
+# UI – Main area
 # ────────────────────────────────────────────────
 st.title("🍴 Restaurant Reviewer & Menu AI")
 st.markdown(
-    "Ask me to review any restaurant (e.g. 'Review Ryukyu Shokudo Tokyo' or 'Best dim sum in Paris') "
-    "or get menu recommendations, dish suggestions, pairings, etc."
+    "Review restaurants worldwide or get dish/menu recommendations. "
+    "Use quick buttons or type your question!"
 )
 
+# ────────────────────────────────────────────────
+# Sidebar with quick buttons
+# ────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Quick Controls")
-    if st.button("Clear Chat History"):
+    st.header("Quick Searches")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Best dim sum Paris", use_container_width=True):
+            add_quick_query("Best dim sum in Paris")
+        
+        if st.button("Okinawan Tokyo", use_container_width=True):
+            add_quick_query("Best Okinawan food in Tokyo")
+        
+        if st.button("Hanoi Old Quarter eats", use_container_width=True):
+            add_quick_query("Best street food and restaurants in Hanoi Old Quarter under 20€")
+    
+    with col2:
+        if st.button("Ryukyu Shokudo review", use_container_width=True):
+            add_quick_query("Review Ryukyu Shokudo in Tokyo")
+        
+        if st.button("Paris Chinese food", use_container_width=True):
+            add_quick_query("Best Chinese restaurants in Paris 13th arrondissement")
+        
+        if st.button("Budget Hanoi dinner", use_container_width=True):
+            add_quick_query("Good dinner options in Hanoi under 20 euros")
+
+    st.markdown("---")
+    
+    if st.button("Clear Chat History", type="primary"):
         st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         st.rerun()
     
-    st.markdown("---")
-    st.caption("Powered by GPT-4o-mini • API key stored securely in secrets")
+    st.caption("Powered by GPT-4o-mini • API key in secrets")
 
 # ────────────────────────────────────────────────
-# Display existing chat messages (skip system prompt)
+# Display chat messages (skip system prompt)
 # ────────────────────────────────────────────────
 for message in st.session_state.messages[1:]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # ────────────────────────────────────────────────
-# User input handling
+# Auto-generate response if needed (for pre-filled query or quick buttons)
 # ────────────────────────────────────────────────
-if prompt := st.chat_input("Ask about a restaurant or menu..."):
-    
-    # Add & display user message
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    # Generate only if no assistant reply yet for the last user message
+    if len(st.session_state.messages) % 2 == 0:  # even length means user just added, no reply
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+
+            try:
+                stream = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=st.session_state.messages,
+                    temperature=0.75,
+                    max_tokens=800,
+                    stream=True
+                )
+
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        full_response += chunk.choices[0].delta.content
+                        message_placeholder.markdown(full_response + "▌")
+
+                message_placeholder.markdown(full_response)
+
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                full_response = "Sorry — couldn't get a response. Try again?"
+
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# ────────────────────────────────────────────────
+# Normal chat input
+# ────────────────────────────────────────────────
+if prompt := st.chat_input("Ask about any restaurant or menu..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
@@ -96,7 +172,7 @@ if prompt := st.chat_input("Ask about a restaurant or menu..."):
             stream = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=st.session_state.messages,
-                temperature=0.75,          # slightly more creative for reviews
+                temperature=0.75,
                 max_tokens=800,
                 stream=True
             )
@@ -110,7 +186,6 @@ if prompt := st.chat_input("Ask about a restaurant or menu..."):
 
         except Exception as e:
             st.error(f"Error: {str(e)}")
-            full_response = "Sorry — I couldn't get a response right now. Try again?"
+            full_response = "Sorry — I couldn't respond right now."
 
-    # Save assistant's reply
     st.session_state.messages.append({"role": "assistant", "content": full_response})
