@@ -1,6 +1,5 @@
 # app.py
-# AI Menu Assistant – powered by GPT-4o-mini
-# For your restaurant / menu website
+# General Restaurant Reviewer & Menu Assistant – powered by GPT-4o-mini
 
 import streamlit as st
 from openai import OpenAI
@@ -9,8 +8,8 @@ from openai import OpenAI
 # Page configuration
 # ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI Menu Assistant",
-    page_icon="🍽️",
+    page_title="Restaurant Reviewer & Menu AI",
+    page_icon="🍴",
     layout="centered",
     initial_sidebar_state="expanded"
 )
@@ -25,26 +24,24 @@ if "OPENAI_API_KEY" not in st.secrets:
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ────────────────────────────────────────────────
-# System prompt – customize this to match your restaurant/menu
+# System prompt – now focused on general restaurant reviews + menu help
 # ────────────────────────────────────────────────
 SYSTEM_PROMPT = """
-You are a friendly, helpful assistant for a restaurant menu.
-You know our menu very well and love recommending dishes.
+You are a knowledgeable, friendly restaurant reviewer and food expert with broad knowledge of dining worldwide (Paris, Tokyo, Hanoi, etc.).
+You provide honest, detailed, balanced reviews based on common sources like Tabelog, Tripadvisor, Google, local guides.
 
-Key facts about our restaurant:
-- We serve a mix of Vietnamese street food, French-inspired dishes, and some international favorites.
-- Popular items: phở, bún chả, bánh mì, dim sum baskets, coq au vin, crème brûlée.
-- We have vegetarian, vegan, and gluten-free options.
-- Price range: €€ (mid-range, good value).
-- Location vibe: cozy, modern, great for dates or small groups.
+When a user asks about a specific restaurant (name + location if given):
+- Include: location/vibe, specialties/standout dishes, ratings & review highlights (pros/cons), who it's good for, overall recommendation (yes/maybe/skip + why).
+- Be factual and mention if info seems limited or dated.
+- Keep responses 200–400 words unless asked for more.
 
-Rules:
-- Be warm, enthusiastic and concise.
-- Always suggest 1–3 dishes based on what the user says.
-- If they mention budget, preferences (spicy, vegetarian, etc.), allergies or occasion → adapt recommendations.
-- If unsure, ask clarifying questions.
-- Never make up prices or unavailable items.
-- End responses naturally – invite more questions.
+If the user asks for recommendations, menu suggestions, pairings, or talks about food preferences:
+- Suggest dishes thoughtfully (consider budget, dietary needs, occasion).
+- If no specific restaurant is mentioned, you can offer general ideas or ask for more details.
+
+Be warm, enthusiastic, concise and helpful.
+Always invite follow-up questions.
+Use markdown for formatting (bold, lists, etc.) when it improves readability.
 """
 
 # ────────────────────────────────────────────────
@@ -58,36 +55,39 @@ if "messages" not in st.session_state:
 # ────────────────────────────────────────────────
 # UI – Header & Sidebar
 # ────────────────────────────────────────────────
-st.title("🍽️ AI Menu Assistant")
-st.markdown("Ask me anything about our menu, get recommendations, or find the perfect dish for you!")
+st.title("🍴 Restaurant Reviewer & Menu AI")
+st.markdown(
+    "Ask me to review any restaurant (e.g. 'Review Ryukyu Shokudo Tokyo' or 'Best dim sum in Paris') "
+    "or get menu recommendations, dish suggestions, pairings, etc."
+)
 
 with st.sidebar:
-    st.header("Quick Actions")
+    st.header("Quick Controls")
     if st.button("Clear Chat History"):
         st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         st.rerun()
     
     st.markdown("---")
-    st.caption("Powered by GPT-4o-mini • Your API key is securely stored in secrets")
+    st.caption("Powered by GPT-4o-mini • API key stored securely in secrets")
 
 # ────────────────────────────────────────────────
-# Display chat history
+# Display existing chat messages (skip system prompt)
 # ────────────────────────────────────────────────
-for message in st.session_state.messages[1:]:  # skip system prompt
+for message in st.session_state.messages[1:]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # ────────────────────────────────────────────────
-# User input
+# User input handling
 # ────────────────────────────────────────────────
-if prompt := st.chat_input("What would you like to eat today? 😊"):
+if prompt := st.chat_input("Ask about a restaurant or menu..."):
     
-    # Add user message to history and display
+    # Add & display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate assistant response
+    # Generate response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
@@ -96,8 +96,8 @@ if prompt := st.chat_input("What would you like to eat today? 😊"):
             stream = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=st.session_state.messages,
-                temperature=0.7,
-                max_tokens=500,
+                temperature=0.75,          # slightly more creative for reviews
+                max_tokens=800,
                 stream=True
             )
 
@@ -109,8 +109,8 @@ if prompt := st.chat_input("What would you like to eat today? 😊"):
             message_placeholder.markdown(full_response)
 
         except Exception as e:
-            st.error(f"Something went wrong: {str(e)}")
-            full_response = "Sorry, I couldn't connect right now. Please try again!"
+            st.error(f"Error: {str(e)}")
+            full_response = "Sorry — I couldn't get a response right now. Try again?"
 
-    # Save assistant response
+    # Save assistant's reply
     st.session_state.messages.append({"role": "assistant", "content": full_response})
