@@ -4,7 +4,8 @@ from openai import OpenAI
 st.set_page_config(
     page_title="Restaurant AI",
     page_icon="🍴",
-    layout="centered"
+    layout="wide",                  # Better for embeds/iframes
+    initial_sidebar_state="collapsed"  # ← Starts with sidebar closed/hidden
 )
 
 # Load API key
@@ -23,7 +24,6 @@ When asked about a restaurant, give a balanced summary:
 - ratings & review highlights
 - who it's good for
 - recommendation (yes/maybe/skip + why)
-
 Be factual, concise, helpful. Use markdown when useful.
 """
 
@@ -35,12 +35,10 @@ if "messages" not in st.session_state:
 
 # Try to get pre-filled query (robust fallback for Cloud quirks)
 pre_filled = None
-
 # Modern method
 if "query" in st.query_params:
     val = st.query_params["query"]
     pre_filled = val[0] if isinstance(val, list) else val
-
 # Fallback to experimental (often more reliable on Cloud initial load)
 if not pre_filled:
     try:
@@ -62,13 +60,13 @@ for msg in st.session_state.messages[1:]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Auto-respond if last is user
+# Auto-respond if last is user (and not already responded)
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    if len(st.session_state.messages) % 2 == 0:
+    # Only auto-respond once per user message
+    if len(st.session_state.messages) % 2 == 1:  # odd length after adding user → needs assistant reply
         with st.chat_message("assistant"):
             placeholder = st.empty()
             response = ""
-
             try:
                 stream = client.chat.completions.create(
                     model="gpt-4o-mini",
@@ -81,22 +79,20 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         response += chunk.choices[0].delta.content
                         placeholder.markdown(response + "▌")
                 placeholder.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
             except Exception as e:
                 st.error("Could not get response. Try again.")
-                response = ""
-
-            st.session_state.messages.append({"role": "assistant", "content": response})
+                # Optionally log e somewhere
 
 # Chat input
 if prompt := st.chat_input("Ask about any restaurant..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
+    
     with st.chat_message("assistant"):
         placeholder = st.empty()
         response = ""
-
         try:
             stream = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -109,14 +105,15 @@ if prompt := st.chat_input("Ask about any restaurant..."):
                     response += chunk.choices[0].delta.content
                     placeholder.markdown(response + "▌")
             placeholder.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
         except Exception as e:
             st.error("Could not get response. Try again.")
-            response = ""
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
-# Sidebar clear
+# Sidebar content (only visible when expanded)
 with st.sidebar:
+    st.markdown("### Controls")
     if st.button("Clear chat"):
         st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         st.rerun()
+    
+    st.caption("Sidebar starts collapsed. Click the ← arrow in the top-left to open.")
