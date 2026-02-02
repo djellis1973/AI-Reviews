@@ -1,0 +1,47 @@
+# app.py
+import streamlit as st
+from openai import OpenAI
+import os
+
+# Securely load your OpenAI API key (use Streamlit secrets in production)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"])
+
+st.title("AI Menu Assistant – Ask about dishes, recommendations, or pairings!")
+
+# Chat history in session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# User input
+if prompt := st.chat_input("Ask me anything about the menu..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+
+        # Call GPT-4o-mini
+        stream = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful restaurant menu assistant. Be friendly, concise, and focus on our dishes (e.g., dim sum, Okinawan cuisine, Paris restaurants). Suggest based on preferences."},
+                *st.session_state.messages
+            ],
+            stream=True,
+        )
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                full_response += chunk.choices[0].delta.content
+                message_placeholder.markdown(full_response + "▌")
+
+        message_placeholder.markdown(full_response)
+
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
