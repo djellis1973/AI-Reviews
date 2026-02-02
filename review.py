@@ -7,7 +7,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Load API key from secrets
+# Load API key
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("OPENAI_API_KEY missing in secrets.")
     st.stop()
@@ -33,25 +33,38 @@ if "messages" not in st.session_state:
         {"role": "system", "content": SYSTEM_PROMPT}
     ]
 
-# Handle pre-filled query from URL (?query=...)
-query_from_url = st.query_params.get("query", None)
-if query_from_url and len(st.session_state.messages) == 1:
-    # Take first value if it's a list (Streamlit sometimes returns list)
-    if isinstance(query_from_url, list):
-        query_from_url = query_from_url[0]
-    st.session_state.messages.append({"role": "user", "content": query_from_url})
+# Try to get pre-filled query (robust fallback for Cloud quirks)
+pre_filled = None
+
+# Modern method
+if "query" in st.query_params:
+    val = st.query_params["query"]
+    pre_filled = val[0] if isinstance(val, list) else val
+
+# Fallback to experimental (often more reliable on Cloud initial load)
+if not pre_filled:
+    try:
+        old_params = st.experimental_get_query_params()
+        if "query" in old_params:
+            pre_filled = old_params["query"][0]
+    except:
+        pass
+
+# Apply prefill only on fresh chat
+if pre_filled and len(st.session_state.messages) == 1:
+    st.session_state.messages.append({"role": "user", "content": pre_filled})
 
 # Title
 st.title("Restaurant AI")
 
-# Show chat history (skip system message)
+# Show messages
 for msg in st.session_state.messages[1:]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Auto-respond if last message is from user (prefill or manual input)
+# Auto-respond if last is user
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    if len(st.session_state.messages) % 2 == 0:  # no assistant reply yet
+    if len(st.session_state.messages) % 2 == 0:
         with st.chat_message("assistant"):
             placeholder = st.empty()
             response = ""
@@ -74,7 +87,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
             st.session_state.messages.append({"role": "assistant", "content": response})
 
-# Normal chat input
+# Chat input
 if prompt := st.chat_input("Ask about any restaurant..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -102,7 +115,7 @@ if prompt := st.chat_input("Ask about any restaurant..."):
 
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-# Small clear button in sidebar
+# Sidebar clear
 with st.sidebar:
     if st.button("Clear chat"):
         st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
