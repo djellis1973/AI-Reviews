@@ -8,39 +8,44 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Hide sidebar
+# Hide sidebar + better typography for headers & stats
 st.markdown("""
     <style>
         section[data-testid="stSidebar"] { display: none !important; }
         [data-testid="collapsedControl"] { display: none !important; }
         .stApp { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
-        h1 { text-align: center; margin-bottom: 0.4rem; }
-        h3 { 
+        h1 { 
             text-align: center; 
-            color: #555; 
-            margin-top: 0; 
-            margin-bottom: 0.3rem; 
-            font-weight: normal; 
+            font-size: 2.8rem !important; 
+            font-weight: bold !important; 
+            margin-bottom: 0.5rem; 
+        }
+        h2.subtitle { 
+            text-align: center; 
+            font-size: 1.8rem !important; 
+            font-weight: bold !important; 
+            color: #333; 
+            margin: 0.2rem 0 1rem 0; 
         }
         .stats { 
             text-align: center; 
-            color: #777; 
-            font-size: 0.95rem; 
-            margin-bottom: 1.5rem; 
-            font-style: italic;
+            font-size: 1.15rem !important; 
+            font-weight: 600; 
+            color: #444; 
+            margin: 0.8rem 0 1.8rem 0; 
         }
-        hr { margin: 1.5rem 0; }
+        hr { margin: 1.5rem 0; border-top: 1px solid #ccc; }
     </style>
 """, unsafe_allow_html=True)
 
-# API key check
+# API key
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("OPENAI_API_KEY missing in secrets.")
     st.stop()
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# System prompt (unchanged from last version – reviews first, negatives lower, disclaimer forced)
+# System prompt (unchanged – reviews first, positives → negatives lower, disclaimer at end)
 SYSTEM_PROMPT = """
 You are a friendly restaurant reviewer using publicly available information.
 
@@ -65,7 +70,7 @@ Be factual, balanced, use markdown. Stay helpful.
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-# Get query from URL
+# Get query
 pre_filled = None
 if "query" in st.query_params:
     val = st.query_params["query"]
@@ -83,14 +88,13 @@ if not pre_filled:
     st.warning("No restaurant specified. Please add ?query=... to the URL.")
     st.stop()
 
-# Clean name aggressively
+# Clean name
 name = pre_filled.strip()
 junk_prefixes = ["Review of ", "Review ", "Reviews of ", "Review La ", "Review of Review "]
 for prefix in junk_prefixes:
     if name.lower().startswith(prefix.lower()):
         name = name[len(prefix):].strip()
 
-# Remove redundant location parts
 for suffix in [" in Barcelona Catalonia Spain", " Barcelona Catalonia Spain", " Barcelona"]:
     if name.endswith(suffix):
         name = name[:-len(suffix)].strip()
@@ -101,22 +105,22 @@ clean_name = name.strip()
 main_title = f"Review of {clean_name}"
 subtitle = f"Reviews – {clean_name}"
 
-# Stats summary (hard-coded from current real data as of Feb 2026)
-stats_text = "Tripadvisor: 4.0/5 from 98 reviews • Other platforms (Google/Restaurant Guru agg.): ~4.1/5 from 2000+ reviews"
+# Stats – Google first, then Tripadvisor (real current data Feb 2026)
+stats_text = "Google: ~4.1/5 from 2000+ reviews • Tripadvisor: 4.0/5 from 98 reviews"
 
 st.set_page_config(page_title=main_title, page_icon="🍴", layout="wide")
 
-# ── Headers + stats ──
+# ── Headers + stats (bolder & larger) ──
 st.title(main_title)
-st.markdown(f"<h3>{subtitle}</h3>", unsafe_allow_html=True)
+st.markdown(f'<h2 class="subtitle">{subtitle}</h2>', unsafe_allow_html=True)
 st.markdown(f'<div class="stats">{stats_text}</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# Add user query once
+# Add user message once
 if len(st.session_state.messages) == 1:
     st.session_state.messages.append({"role": "user", "content": pre_filled})
 
-# Generate review once
+# Generate once
 if len(st.session_state.messages) == 2:
     with st.spinner("Gathering reviews & insights..."):
         try:
@@ -137,7 +141,7 @@ if len(st.session_state.messages) == 2:
         except Exception as e:
             st.error(f"Could not generate review: {str(e)}")
 
-# Display existing review
+# Show existing
 elif len(st.session_state.messages) > 2:
     last_msg = st.session_state.messages[-1]
     if last_msg["role"] == "assistant":
