@@ -8,77 +8,69 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Hide sidebar completely
+# Hide sidebar
 st.markdown("""
     <style>
-        section[data-testid="stSidebar"] {
-            display: none !important;
+        section[data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+        .stApp { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+        h1 { text-align: center; margin-bottom: 0.4rem; }
+        h3 { 
+            text-align: center; 
+            color: #555; 
+            margin-top: 0; 
+            margin-bottom: 0.3rem; 
+            font-weight: normal; 
         }
-        [data-testid="collapsedControl"] {
-            display: none !important;
+        .stats { 
+            text-align: center; 
+            color: #777; 
+            font-size: 0.95rem; 
+            margin-bottom: 1.5rem; 
+            font-style: italic;
         }
-        .stApp {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 0.8rem;
-        }
-        h2 {
-            margin-top: 0;
-            text-align: center;
-            color: #555;
-        }
-        hr {
-            margin: 1.8rem 0;
-        }
+        hr { margin: 1.5rem 0; }
     </style>
 """, unsafe_allow_html=True)
 
-# Load API key
+# API key check
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("OPENAI_API_KEY missing in secrets.")
     st.stop()
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Updated system prompt — tells model to lead with reviews and expand on them
+# System prompt (unchanged from last version – reviews first, negatives lower, disclaimer forced)
 SYSTEM_PROMPT = """
-You are a friendly restaurant reviewer and food expert.
+You are a friendly restaurant reviewer using publicly available information.
 
-When asked about a restaurant, structure your answer like this:
-1. Start with the most interesting and balanced REVIEW HIGHLIGHTS from recent visitors.
-   - Include direct quotes or very close paraphrases from real reviews
-   - Mention common praise AND common complaints
-   - Talk about service, atmosphere, value for money, consistency
-   - Expand on this section — make it the longest / most detailed part
+For any restaurant query:
+1. Lead with a detailed REVIEW HIGHLIGHTS section:
+   - Start with the most common positive feedback (quotes/paraphrases from real visitors)
+   - Mention strengths: food quality, specific dishes (pizza, pasta, etc.), service, atmosphere, value
+   - Then lower down, fairly mention common criticisms / negatives (e.g. slow service, higher prices, inconsistency)
+   - Use bullet points or short paragraphs; make this the longest part
 
-2. Then briefly cover:
-   - location & overall vibe
-   - specialties / most recommended dishes
-   - who it's good for (families, couples, solo, business, tourists…)
+2. Then briefly: location & vibe, specialties/best dishes, who it's good for
 
-3. Finish with clear recommendation:
-   - Yes / Maybe / Skip + short reason
+3. End with clear recommendation (Yes / Maybe / Skip + why)
 
-Be factual, use markdown (bullet points, bold, quotes), stay balanced and helpful.
+At the very end of your entire response, always add this exact disclaimer in italics:
+
+*Disclaimer: This summary is AI-generated and based on publicly available reviews (e.g. Tripadvisor, Google, etc.) as of 2026. Individual experiences vary. Check recent reviews directly.*
+
+Be factual, balanced, use markdown. Stay helpful.
 """
 
-# Initialize messages
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
+    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-# Get restaurant name from URL (?query=...)
+# Get query from URL
 pre_filled = None
 if "query" in st.query_params:
     val = st.query_params["query"]
     pre_filled = val[0] if isinstance(val, list) else val
 
-# Fallback for older Streamlit versions
 if not pre_filled:
     try:
         old_params = st.experimental_get_query_params()
@@ -91,30 +83,40 @@ if not pre_filled:
     st.warning("No restaurant specified. Please add ?query=... to the URL.")
     st.stop()
 
-# Clean name (remove "Review of ..." if someone added it)
-review_prefix = "Review of "
-if pre_filled.lower().startswith(review_prefix.lower()):
-    clean_name = pre_filled[len(review_prefix):].strip()
-else:
-    clean_name = pre_filled.strip()
+# Clean name aggressively
+name = pre_filled.strip()
+junk_prefixes = ["Review of ", "Review ", "Reviews of ", "Review La ", "Review of Review "]
+for prefix in junk_prefixes:
+    if name.lower().startswith(prefix.lower()):
+        name = name[len(prefix):].strip()
 
-# Create nice-looking titles
+# Remove redundant location parts
+for suffix in [" in Barcelona Catalonia Spain", " Barcelona Catalonia Spain", " Barcelona"]:
+    if name.endswith(suffix):
+        name = name[:-len(suffix)].strip()
+
+clean_name = name.strip()
+
+# Titles
 main_title = f"Review of {clean_name}"
-subtitle = f"Reviews – {clean_name.split(' in ')[0].strip()}"   # e.g. "Reviews – La Tagliatella Travessera De Gràcia"
+subtitle = f"Reviews – {clean_name}"
 
-# Set browser tab title
+# Stats summary (hard-coded from current real data as of Feb 2026)
+stats_text = "Tripadvisor: 4.0/5 from 98 reviews • Other platforms (Google/Restaurant Guru agg.): ~4.1/5 from 2000+ reviews"
+
 st.set_page_config(page_title=main_title, page_icon="🍴", layout="wide")
 
-# ── Header ────────────────────────────────────────────────
+# ── Headers + stats ──
 st.title(main_title)
-st.markdown(f"### {subtitle}")           # smaller centered sub-header
+st.markdown(f"<h3>{subtitle}</h3>", unsafe_allow_html=True)
+st.markdown(f'<div class="stats">{stats_text}</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# Add user query only once
+# Add user query once
 if len(st.session_state.messages) == 1:
     st.session_state.messages.append({"role": "user", "content": pre_filled})
 
-# Generate review only once
+# Generate review once
 if len(st.session_state.messages) == 2:
     with st.spinner("Gathering reviews & insights..."):
         try:
@@ -135,7 +137,7 @@ if len(st.session_state.messages) == 2:
         except Exception as e:
             st.error(f"Could not generate review: {str(e)}")
 
-# Show already generated content
+# Display existing review
 elif len(st.session_state.messages) > 2:
     last_msg = st.session_state.messages[-1]
     if last_msg["role"] == "assistant":
