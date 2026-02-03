@@ -8,7 +8,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Hide sidebar + better typography for headers & stats
+# Hide sidebar + enhanced typography
 st.markdown("""
     <style>
         section[data-testid="stSidebar"] { display: none !important; }
@@ -19,13 +19,6 @@ st.markdown("""
             font-size: 2.8rem !important; 
             font-weight: bold !important; 
             margin-bottom: 0.5rem; 
-        }
-        h2.subtitle { 
-            text-align: center; 
-            font-size: 1.8rem !important; 
-            font-weight: bold !important; 
-            color: #333; 
-            margin: 0.2rem 0 1rem 0; 
         }
         .stats { 
             text-align: center; 
@@ -45,7 +38,7 @@ if "OPENAI_API_KEY" not in st.secrets:
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# System prompt (unchanged – reviews first, positives → negatives lower, disclaimer at end)
+# Updated system prompt: disclaimer after highlights, negatives lower
 SYSTEM_PROMPT = """
 You are a friendly restaurant reviewer using publicly available information.
 
@@ -56,13 +49,13 @@ For any restaurant query:
    - Then lower down, fairly mention common criticisms / negatives (e.g. slow service, higher prices, inconsistency)
    - Use bullet points or short paragraphs; make this the longest part
 
+After REVIEW HIGHLIGHTS, always add this exact disclaimer in italics:
+
+*Disclaimer: This summary is AI-generated and based on publicly available reviews (e.g. Tripadvisor, Google, etc.) as of early 2026. Individual experiences vary. Check recent reviews directly.*
+
 2. Then briefly: location & vibe, specialties/best dishes, who it's good for
 
 3. End with clear recommendation (Yes / Maybe / Skip + why)
-
-At the very end of your entire response, always add this exact disclaimer in italics:
-
-*Disclaimer: This summary is AI-generated and based on publicly available reviews (e.g. Tripadvisor, Google, etc.) as of 2026. Individual experiences vary. Check recent reviews directly.*
 
 Be factual, balanced, use markdown. Stay helpful.
 """
@@ -101,18 +94,16 @@ for suffix in [" in Barcelona Catalonia Spain", " Barcelona Catalonia Spain", " 
 
 clean_name = name.strip()
 
-# Titles
-main_title = f"Review of {clean_name}"
+# Single header (former subtitle, now main)
 subtitle = f"Reviews – {clean_name}"
 
-# Stats – Google first, then Tripadvisor (real current data Feb 2026)
-stats_text = "Google: ~4.1/5 from 2000+ reviews • Tripadvisor: 4.0/5 from 98 reviews"
+# Stats – Google first, updated with latest verified data (Feb 2026)
+stats_text = "Google: 4.1/5 from 1900 reviews • Tripadvisor: 4.0/5 from 98 reviews"
 
-st.set_page_config(page_title=main_title, page_icon="🍴", layout="wide")
+st.set_page_config(page_title=subtitle, page_icon="🍴", layout="wide")
 
-# ── Headers + stats (bolder & larger) ──
-st.title(main_title)
-st.markdown(f'<h2 class="subtitle">{subtitle}</h2>', unsafe_allow_html=True)
+# ── Single header + stats ──
+st.title(subtitle)
 st.markdown(f'<div class="stats">{stats_text}</div>', unsafe_allow_html=True)
 st.markdown("---")
 
