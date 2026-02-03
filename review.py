@@ -38,12 +38,14 @@ if "OPENAI_API_KEY" not in st.secrets:
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Updated system prompt: disclaimer after highlights, negatives lower
+# Updated system prompt: clear heading, negatives lower, disclaimer after highlights, correct date
 SYSTEM_PROMPT = """
 You are a friendly restaurant reviewer using publicly available information.
 
 For any restaurant query:
-1. Lead with a detailed REVIEW HIGHLIGHTS section:
+Start with overall ratings like: Google: X.X/5 from ~Y reviews • Tripadvisor: Z.Z/5 from ~W reviews
+
+1. Then lead with a detailed ## REVIEW HIGHLIGHTS section:
    - Start with the most common positive feedback (quotes/paraphrases from real visitors)
    - Mention strengths: food quality, specific dishes (pizza, pasta, etc.), service, atmosphere, value
    - Then lower down, fairly mention common criticisms / negatives (e.g. slow service, higher prices, inconsistency)
@@ -51,7 +53,7 @@ For any restaurant query:
 
 After REVIEW HIGHLIGHTS, always add this exact disclaimer in italics:
 
-*Disclaimer: This summary is AI-generated and based on publicly available reviews (e.g. Tripadvisor, Google, etc.) as of early 2026. Individual experiences vary. Check recent reviews directly.*
+*Disclaimer: This summary is AI-generated and based on publicly available reviews (e.g. Tripadvisor, Google, etc.) as of the model's knowledge cutoff in October 2023. Individual experiences vary. Check recent reviews directly.*
 
 2. Then briefly: location & vibe, specialties/best dishes, who it's good for
 
@@ -94,24 +96,36 @@ for suffix in [" in Barcelona Catalonia Spain", " Barcelona Catalonia Spain", " 
 
 clean_name = name.strip()
 
-# Single header (former subtitle, now main)
+# Single header
 subtitle = f"Reviews – {clean_name}"
-
-# Stats – Google first, updated with latest verified data (Feb 2026)
-stats_text = "Google: 4.1/5 from 1900 reviews • Tripadvisor: 4.0/5 from 98 reviews"
 
 st.set_page_config(page_title=subtitle, page_icon="🍴", layout="wide")
 
-# ── Single header + stats ──
+# ── Single header ──
 st.title(subtitle)
-st.markdown(f'<div class="stats">{stats_text}</div>', unsafe_allow_html=True)
+
+# Dynamic stats generation (separate call for ratings)
+if "stats" not in st.session_state:
+    with st.spinner("Fetching ratings..."):
+        try:
+            stats_prompt = f"What are the overall ratings and review counts for the restaurant '{pre_filled}' on Google and Tripadvisor? Start with Google. Format exactly as: Google: X.X/5 from Y reviews • Tripadvisor: Z.Z/5 from W reviews"
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": stats_prompt}],
+                temperature=0.0
+            )
+            st.session_state.stats = response.choices[0].message.content
+        except Exception as e:
+            st.session_state.stats = "Ratings unavailable."
+
+st.markdown(f'<div class="stats">{st.session_state.stats}</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 # Add user message once
 if len(st.session_state.messages) == 1:
     st.session_state.messages.append({"role": "user", "content": pre_filled})
 
-# Generate once
+# Generate review once
 if len(st.session_state.messages) == 2:
     with st.spinner("Gathering reviews & insights..."):
         try:
